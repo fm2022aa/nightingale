@@ -310,7 +310,7 @@ func (ws *WorkersType) BuildRe(rids []int64) {
 func (r *RuleEval) Judge(clusterName string, vectors []conv.Vector) {
 	now := time.Now().Unix()
 
-	alertingKeys, ruleExists := r.MakeNewEvent("inner", now, clusterName, vectors)
+	alertingKeys, ruleExists := r.MakeNewEvent("inner", now, clusterName, vectors, 0)
 	if !ruleExists {
 		return
 	}
@@ -319,7 +319,7 @@ func (r *RuleEval) Judge(clusterName string, vectors []conv.Vector) {
 	r.recoverRule(alertingKeys, now)
 }
 
-func (r *RuleEval) MakeNewEvent(from string, now int64, clusterName string, vectors []conv.Vector) (map[string]struct{}, bool) {
+func (r *RuleEval) MakeNewEvent(from string, now int64, clusterName string, vectors []conv.Vector, severity int) (map[string]struct{}, bool) {
 	// 有可能rule的一些配置已经发生变化，比如告警接收人、callbacks等
 	// 这些信息的修改是不会引起worker restart的，但是确实会影响告警处理逻辑
 	// 所以，这里直接从memsto.AlertRuleCache中获取并覆盖
@@ -334,7 +334,7 @@ func (r *RuleEval) MakeNewEvent(from string, now int64, clusterName string, vect
 	alertingKeys := make(map[string]struct{})
 	for i := 0; i < count; i++ {
 		// compute hash
-		hash := str.MD5(fmt.Sprintf("%d_%s", r.rule.Id, vectors[i].Key))
+		hash := str.MD5(fmt.Sprintf("%d_%s_%s", r.rule.Id, vectors[i].Key, r.rule.PromQl))
 		alertingKeys[hash] = struct{}{}
 
 		// rule disabled in this time span?
@@ -427,6 +427,7 @@ func (r *RuleEval) MakeNewEvent(from string, now int64, clusterName string, vect
 		event.LastEvalTime = now
 		if from != "inner" {
 			event.LastEvalTime = event.TriggerTime
+			event.Severity = severity
 		}
 
 		r.handleNewEvent(event)

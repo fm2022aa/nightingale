@@ -9,6 +9,7 @@ import (
 	"github.com/didi/nightingale/v5/src/server/common/conv"
 	"github.com/didi/nightingale/v5/src/server/config"
 	"github.com/didi/nightingale/v5/src/server/engine"
+	"github.com/didi/nightingale/v5/src/server/memsto"
 	promstat "github.com/didi/nightingale/v5/src/server/stat"
 
 	"github.com/gin-gonic/gin"
@@ -78,10 +79,11 @@ func pushEventToQueue(c *gin.Context) {
 }
 
 type eventForm struct {
-	Alert   bool          `json:"alert"`
-	Vectors []conv.Vector `json:"vectors"`
-	RuleId  int64         `json:"rule_id"`
-	Cluster string        `json:"cluster"`
+	Alert    bool          `json:"alert"`
+	Vectors  []conv.Vector `json:"vectors"`
+	RuleId   int64         `json:"rule_id"`
+	Cluster  string        `json:"cluster"`
+	Severity int           `json:"severity"`
 }
 
 func judgeEvent(c *gin.Context) {
@@ -107,10 +109,14 @@ func makeEvent(c *gin.Context) {
 		}
 
 		if events[i].Alert {
-			go re.MakeNewEvent("http", now, events[i].Cluster, events[i].Vectors)
+			go re.MakeNewEvent("http", now, events[i].Cluster, events[i].Vectors, events[i].Severity)
 		} else {
 			for _, vector := range events[i].Vectors {
-				hash := str.MD5(fmt.Sprintf("%d_%s", events[i].RuleId, vector.Key))
+				rule := memsto.AlertRuleCache.Get(events[i].RuleId)
+				if rule == nil {
+					continue
+				}
+				hash := str.MD5(fmt.Sprintf("%d_%s_%s", events[i].RuleId, vector.Key, rule.PromQl))
 				now := vector.Timestamp
 				go re.RecoverEvent(hash, now, vector.Value)
 			}
