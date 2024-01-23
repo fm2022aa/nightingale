@@ -79,17 +79,18 @@ func (rt *Router) taskGetsByGids(c *gin.Context) {
 }
 
 type taskForm struct {
-	Title     string   `json:"title" binding:"required"`
-	Account   string   `json:"account" binding:"required"`
-	Batch     int      `json:"batch"`
-	Tolerance int      `json:"tolerance"`
-	Timeout   int      `json:"timeout"`
-	Pause     string   `json:"pause"`
-	Script    string   `json:"script" binding:"required"`
-	Args      string   `json:"args"`
-	Action    string   `json:"action" binding:"required"`
-	Creator   string   `json:"creator"`
-	Hosts     []string `json:"hosts" binding:"required"`
+	Title      string             `json:"title" binding:"required"`
+	Account    string             `json:"account" binding:"required"`
+	Batch      int                `json:"batch"`
+	Tolerance  int                `json:"tolerance"`
+	Timeout    int                `json:"timeout"`
+	Pause      string             `json:"pause"`
+	Script     string             `json:"script" binding:"required"`
+	Args       string             `json:"args"`
+	Action     string             `json:"action" binding:"required"`
+	Creator    string             `json:"creator"`
+	Hosts      []string           `json:"hosts"`
+	HostsQuery []models.HostQuery `json:"hosts_query" binding:"required"`
 }
 
 func (f *taskForm) Verify() error {
@@ -138,10 +139,6 @@ func (f *taskForm) Verify() error {
 		return fmt.Errorf("arg(pause) is dangerous")
 	}
 
-	if len(f.Hosts) == 0 {
-		return fmt.Errorf("arg(hosts) empty")
-	}
-
 	if f.Action != "start" && f.Action != "pause" {
 		return fmt.Errorf("arg(action) invalid")
 	}
@@ -167,11 +164,23 @@ func (rt *Router) taskAdd(c *gin.Context) {
 	var f taskForm
 	ginx.BindJSON(c, &f)
 
+	query := models.GetHostsQuery(f.HostsQuery)
+	// set limit 0,0 to get all hosts
+	targets, err := models.TargetGetsByFilter(rt.Ctx, query, 0, 0, struct{}{})
+	ginx.Dangerous(err)
+	if len(targets) == 0 {
+		ginx.Bomb(http.StatusBadRequest, "no targets found by %v", f.HostsQuery)
+	}
+	f.Hosts = make([]string, 0, len(targets))
+	for _, t := range targets {
+		f.Hosts = append(f.Hosts, t.Ident)
+	}
+
 	bgid := ginx.UrlParamInt64(c, "id")
 	user := c.MustGet("user").(*models.User)
 	f.Creator = user.Username
 
-	err := f.Verify()
+	err = f.Verify()
 	ginx.Dangerous(err)
 
 	f.HandleFH(f.Hosts[0])

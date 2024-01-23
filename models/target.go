@@ -137,10 +137,13 @@ func TargetGets(ctx *ctx.Context, bgids []int64, dsIds []int64, query string, do
 }
 
 // 根据 groupids, tags, hosts 查询 targets
-func TargetGetsByFilter(ctx *ctx.Context, query []map[string]interface{}, limit, offset int) ([]*Target, error) {
+func TargetGetsByFilter(ctx *ctx.Context, query []map[string]interface{}, limit, offset int, noOrderByIdent ...struct{}) ([]*Target, error) {
 	var lst []*Target
 	session := TargetFilterQueryBuild(ctx, query, limit, offset)
-	err := session.Order("ident").Find(&lst).Error
+	if len(noOrderByIdent) == 0 {
+		session = session.Order("ident")
+	}
+	err := session.Find(&lst).Error
 	cache := make(map[int64]*BusiGroup)
 	for i := 0; i < len(lst); i++ {
 		lst[i].TagsJSON = strings.Fields(lst[i].Tags)
