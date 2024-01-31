@@ -88,6 +88,10 @@ func TargetDel(ctx *ctx.Context, idents []string) error {
 	return DB(ctx).Where("ident in ?", idents).Delete(new(Target)).Error
 }
 
+func TargetDelLoss(ctx *ctx.Context) error {
+	return DB(ctx).Where("update_at  < UNIX_TIMESTAMP(NOW() - INTERVAL 1 WEEK)").Delete(new(Target)).Error
+}
+
 func buildTargetWhere(ctx *ctx.Context, bgids []int64, dsIds []int64, query string, downtime int64) *gorm.DB {
 	session := DB(ctx).Model(&Target{})
 
@@ -134,10 +138,13 @@ func TargetGets(ctx *ctx.Context, bgids []int64, dsIds []int64, query string, do
 }
 
 // 根据 groupids, tags, hosts 查询 targets
-func TargetGetsByFilter(ctx *ctx.Context, query []map[string]interface{}, limit, offset int) ([]*Target, error) {
+func TargetGetsByFilter(ctx *ctx.Context, query []map[string]interface{}, limit, offset int, noOrderByIdent ...struct{}) ([]*Target, error) {
 	var lst []*Target
 	session := TargetFilterQueryBuild(ctx, query, limit, offset)
-	err := session.Order("ident").Find(&lst).Error
+	if len(noOrderByIdent) == 0 {
+		session = session.Order("ident")
+	}
+	err := session.Find(&lst).Error
 	cache := make(map[int64]*BusiGroup)
 	for i := 0; i < len(lst); i++ {
 		lst[i].TagsJSON = strings.Fields(lst[i].Tags)

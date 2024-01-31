@@ -3,6 +3,7 @@ package migrate
 import (
 	"github.com/ccfos/nightingale/v6/models"
 	"github.com/ccfos/nightingale/v6/pkg/ormx"
+
 	"github.com/toolkits/pkg/logger"
 	"gorm.io/gorm"
 )
@@ -14,7 +15,7 @@ func Migrate(db *gorm.DB) {
 
 func MigrateTables(db *gorm.DB) error {
 	dts := []interface{}{&RecordingRule{}, &AlertRule{}, &AlertSubscribe{}, &AlertMute{},
-		&TaskRecord{}, &ChartShare{}, &Target{}, &Configs{}, &Datasource{}, &NotifyTpl{}, &Board{}, &BoardBusigroup{}}
+		&TaskRecord{}, &TaskTpl{}, &ChartShare{}, &Target{}, &Configs{}, &Datasource{}, &NotifyTpl{}, &Board{}, &BoardBusigroup{}}
 
 	if !columnHasIndex(db, &AlertHisEvent{}, "last_eval_time") {
 		dts = append(dts, &AlertHisEvent{})
@@ -150,6 +151,11 @@ type ChartShare struct {
 type TaskRecord struct {
 	EventId int64 `gorm:"column:event_id;bigint(20);not null;default:0;comment:event id;index:idx_event_id"`
 }
+
+type TaskTpl struct {
+	HostsQuery []models.HostQuery `json:"hosts_query" gorm:"column:hosts_query;varchar(4096);default:'';comment:hosts_query;serializer:json"`
+}
+
 type AlertHisEvent struct {
 	LastEvalTime int64 `gorm:"column:last_eval_time;bigint(20);not null;default:0;comment:for time filter;index:idx_last_eval_time"`
 }

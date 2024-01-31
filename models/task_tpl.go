@@ -15,22 +15,23 @@ import (
 )
 
 type TaskTpl struct {
-	Id        int64    `json:"id" gorm:"primaryKey"`
-	GroupId   int64    `json:"group_id"`
-	Title     string   `json:"title"`
-	Batch     int      `json:"batch"`
-	Tolerance int      `json:"tolerance"`
-	Timeout   int      `json:"timeout"`
-	Pause     string   `json:"pause"`
-	Script    string   `json:"script"`
-	Args      string   `json:"args"`
-	Tags      string   `json:"-"`
-	TagsJSON  []string `json:"tags" gorm:"-"`
-	Account   string   `json:"account"`
-	CreateAt  int64    `json:"create_at"`
-	CreateBy  string   `json:"create_by"`
-	UpdateAt  int64    `json:"update_at"`
-	UpdateBy  string   `json:"update_by"`
+	Id         int64       `json:"id" gorm:"primaryKey"`
+	GroupId    int64       `json:"group_id"`
+	Title      string      `json:"title"`
+	Batch      int         `json:"batch"`
+	Tolerance  int         `json:"tolerance"`
+	Timeout    int         `json:"timeout"`
+	Pause      string      `json:"pause"`
+	Script     string      `json:"script"`
+	Args       string      `json:"args"`
+	Tags       string      `json:"-"`
+	TagsJSON   []string    `json:"tags" gorm:"-"`
+	Account    string      `json:"account"`
+	CreateAt   int64       `json:"create_at"`
+	CreateBy   string      `json:"create_by"`
+	UpdateAt   int64       `json:"update_at"`
+	UpdateBy   string      `json:"update_by"`
+	HostsQuery []HostQuery `json:"hosts_query" gorm:"serializer:json"`
 }
 
 func (t *TaskTpl) TableName() string {
@@ -157,7 +158,7 @@ func (t *TaskTpl) CleanFields() error {
 	return nil
 }
 
-func (t *TaskTpl) Save(ctx *ctx.Context, hosts []string) error {
+func (t *TaskTpl) Save(ctx *ctx.Context) error {
 	if err := t.CleanFields(); err != nil {
 		return err
 	}
@@ -171,38 +172,29 @@ func (t *TaskTpl) Save(ctx *ctx.Context, hosts []string) error {
 		return fmt.Errorf("task template already exists")
 	}
 
-	return DB(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(t).Error; err != nil {
-			return err
-		}
-
-		for i := 0; i < len(hosts); i++ {
-			host := strings.TrimSpace(hosts[i])
-			if host == "" {
-				continue
-			}
-
-			err := tx.Table("task_tpl_host").Create(map[string]interface{}{
-				"id":   t.Id,
-				"host": host,
-			}).Error
-
-			if err != nil {
-				return err
-			}
-		}
-
-		return nil
-	})
+	return DB(ctx).Create(t).Error
 }
 
-func (t *TaskTpl) Hosts(ctx *ctx.Context) ([]string, error) {
-	var arr []string
-	err := DB(ctx).Table("task_tpl_host").Where("id=?", t.Id).Order("ii").Pluck("host", &arr).Error
-	return arr, err
+func (t *TaskTpl) HostsToHostsQuery(ctx *ctx.Context) ([]HostQuery, error) {
+	var hosts []string
+	err := DB(ctx).Table("task_tpl_host").Where("id=?", t.Id).Order("ii").Pluck("host", &hosts).Error
+	if err != nil {
+		return nil, err
+	}
+
+	hostsI := make([]interface{}, 0, len(hosts))
+	for _, host := range hosts {
+		hostsI = append(hostsI, host)
+	}
+
+	return []HostQuery{{
+		Key:    "hosts",
+		Op:     "==",
+		Values: hostsI,
+	}}, nil
 }
 
-func (t *TaskTpl) Update(ctx *ctx.Context, hosts []string) error {
+func (t *TaskTpl) Update(ctx *ctx.Context) error {
 	if err := t.CleanFields(); err != nil {
 		return err
 	}
@@ -217,45 +209,13 @@ func (t *TaskTpl) Update(ctx *ctx.Context, hosts []string) error {
 	}
 
 	return DB(ctx).Transaction(func(tx *gorm.DB) error {
-		err := tx.Model(t).Updates(map[string]interface{}{
-			"title":     t.Title,
-			"batch":     t.Batch,
-			"tolerance": t.Tolerance,
-			"timeout":   t.Timeout,
-			"pause":     t.Pause,
-			"script":    t.Script,
-			"args":      t.Args,
-			"tags":      t.Tags,
-			"account":   t.Account,
-			"update_by": t.UpdateBy,
-			"update_at": t.UpdateAt,
-		}).Error
-
+		err := tx.Model(t).Select("title", "batch", "tolerance", "timeout", "pause", "script",
+			"args", "tags", "account", "update_by", "update_at", "hosts_query").Updates(t).Error
 		if err != nil {
 			return err
 		}
 
-		if err = tx.Exec("DELETE FROM task_tpl_host WHERE id = ?", t.Id).Error; err != nil {
-			return err
-		}
-
-		for i := 0; i < len(hosts); i++ {
-			host := strings.TrimSpace(hosts[i])
-			if host == "" {
-				continue
-			}
-
-			err := tx.Table("task_tpl_host").Create(map[string]interface{}{
-				"id":   t.Id,
-				"host": host,
-			}).Error
-
-			if err != nil {
-				return err
-			}
-		}
-
-		return nil
+		return tx.Exec("DELETE FROM task_tpl_host WHERE id = ?", t.Id).Error
 	})
 }
 

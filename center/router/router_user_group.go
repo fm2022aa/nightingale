@@ -124,6 +124,10 @@ func (rt *Router) userGroupGet(c *gin.Context) {
 	}, err)
 }
 
+type userGroupDelForm struct {
+	IsSyncToFlashDuty bool `json:"is_sync_to_flashduty"`
+}
+
 func (rt *Router) userGroupDel(c *gin.Context) {
 	isSyncToFlashDuty := ginx.QueryBool(c, "is_sync_to_flashduty", false)
 	ug := c.MustGet("user_group").(*models.UserGroup)
